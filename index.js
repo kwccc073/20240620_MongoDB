@@ -2,7 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import mongoose from 'mongoose'
 import User from './user.js'
-import { StatusCodes } from 'http-status-codes' // 用於將HTTP狀態碼改寫成事件
+import { StatusCodes } from 'http-status-codes' // 用於將HTTP狀態碼改寫寫成status（方便閱讀）
 import validator from 'validator'
 
 // 連線到資料庫
