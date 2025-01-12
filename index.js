@@ -1,24 +1,27 @@
-import 'dotenv/config'
-import express from 'express'
+import 'dotenv/config' // 引入環境變數
+import express from 'express' // 網頁伺服器
 import mongoose from 'mongoose'
-import User from './user.js'
+import User from './user.js' // 引入model，請求會用到
 import { StatusCodes } from 'http-status-codes' // 用於將HTTP狀態碼改寫寫成status（方便閱讀）
 import validator from 'validator'
 
-// 連線到資料庫
+// 連線到資料庫--------------------------
 mongoose.connect(process.env.DB_URL)
+  // promise => 所以要寫.then() （也可以用await，但寫法較複雜）
   .then(() => {
     console.log('資料庫連線成功')
   })
+  // 這是當出現錯誤時要執行的
   .catch((error) => {
     console.log('資料庫連線失敗')
     console.error(error)
   })
-// 建立網頁伺服器
+
+// 建立網頁伺服器（作為API server）-------------------------
 // express()的語法順序會有影響
 const app = express()
 
-// 將傳入的body解析為json，才能處理post請求
+// express.json()將傳入的body解析為json ***一定要先解析，才能處理請求***
 app.use(express.json())
 // 處理express.json的錯誤
 /* 處理 middleware的錯誤一定要有四個參數 error, req, rew, next
@@ -33,13 +36,22 @@ app.use((_, req, res, next) => {
   })
 })
 
-// 處理新增（請求為post）
-// app.請求方式(路徑,處理function)
-// req = 進來的，res = 出去的
-// 處理function通常用async
+/* app.請求方式(路徑,function)--------------------------------------
+   function 通常會用 async(req, res)=>{}，因為要對伺服器/資料庫做操作，一定會有延遲
+   req => request 進來的
+   res => response 出去的 */
+
+// 新增（請求為post）-----------------------
 app.post('/', async (req, res) => {
   try {
     console.log(req.body)
+    /* 參考：https://mongoosejs.com/docs/models.html
+     寫法一：.create() 是mongoose的語法
+     const user = await User.create()
+     寫法二：物件導向
+     const user = new User()
+     user.save()
+    */
     /* 另一種寫法
     const user = new User({
       accout: req.body.accout,
@@ -240,6 +252,11 @@ app.patch('/:id', async (req, res) => {
   }
 })
 
+// 伺服器.listen(port, [hostname], [callback])
+// port => 埠號：用來區分同一台機器上的不同服務
+// []表示不一定需要
+// hostname => 指定伺服器要監聽的網路位址，預設為 localhost；如果希望伺服器可被外網訪問，可以設置為 0.0.0.0
+// callback => 伺服器啟動後執行的回呼函數，通常用於顯示伺服器已啟動的提示。
 app.listen(process.env.PORT || 4000, () => {
   console.log('伺服器啟動')
 })
