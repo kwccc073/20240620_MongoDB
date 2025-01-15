@@ -2,7 +2,7 @@ import 'dotenv/config' // 引入環境變數
 import express from 'express' // 網頁伺服器
 import mongoose from 'mongoose'
 import User from './user.js' // 引入model，請求會用到
-import { StatusCodes } from 'http-status-codes' // 用於將HTTP狀態碼改寫寫成status（方便閱讀）
+import { StatusCodes } from 'http-status-codes' // 用於將HTTP狀態碼改寫寫成status（方便閱讀，就不用記數字對應的status）
 import validator from 'validator'
 
 // 連線到資料庫--------------------------
@@ -17,18 +17,20 @@ mongoose.connect(process.env.DB_URL)
     console.error(error)
   })
 
-// 建立網頁伺服器（作為API server）-------------------------
+// 建立網頁伺服器（作為API server）-----------------------------------------------
 // express()的語法順序會有影響
 const app = express()
 
+// Middleware 是伺服器處理請求和回應的中間層--------------------------------------------------
 // express.json()將傳入的body解析為json ***一定要先解析，才能處理請求***
 app.use(express.json())
-// 處理express.json的錯誤
+// 處理express.json的錯誤，如果上面這行有錯才會進行下方程式碼
 /* 處理 middleware的錯誤一定要有四個參數 error, req, rew, next
-   req, res處理請求
-   next = 繼續下一步處理
-   error = 錯誤訊息
-   _表示忽略參數不用 */
+    error = 前一個middleware發生的錯誤
+    req, res => 處理請求
+    next = 繼續下一步處理（有next就是middleware），沒有呼叫next會卡住
+
+    error寫了eslint會要你處理，所以用_表示忽略參數不用 */
 app.use((_, req, res, next) => {
   res.status(StatusCodes.BAD_REQUEST).json({
     success: false,
@@ -36,12 +38,12 @@ app.use((_, req, res, next) => {
   })
 })
 
-/* app.請求方式(路徑,function)--------------------------------------
+/* app.請求方式(路徑,function)------------------------------------------------------------
    function 通常會用 async(req, res)=>{}，因為要對伺服器/資料庫做操作，一定會有延遲
    req => request 進來的
    res => response 出去的 */
 
-// 新增（請求為post）-----------------------
+// 新增（請求為post）-------------------------------------------------------------------
 app.post('/', async (req, res) => {
   try {
     console.log(req.body)
@@ -52,44 +54,47 @@ app.post('/', async (req, res) => {
      const user = new User()
      user.save()
     */
-    /* 另一種寫法
-    const user = new User({
-      accout: req.body.accout,
-      emali: req.body.emali
-    })
-    await user.save()
-    */
-    /* 另一種寫法
+
+    // user為建立完的資料
+    // create()用來新增新的資料，會需要一段時間故用await
+    // 直接把請求之body傳入，mongoose會自動做資料的驗證，若body出現資料庫沒有的欄位也不會幫你新增，會自動踢掉
+    const user = await User.create(req.body)
+
+    /* 下面這個寫法是一項一項寫
     const user = await User.create({
       accout: req.body.accout,
       emali: req.body.emali
     })
     */
 
-    // user為建立完的資料
-    // create()用來新增新的資料，會需要一段時間故用await
-    const user = await User.create(req.body)
-
+    /*
+    res.status() => 設定狀態碼
+    res.json() => 回應的JSON
+    可以簡寫成res.status().json()
+    一個請求只能寫一次res.status().json()
+    */
     // 回傳(res.json)只能出現一次，超過一個會出現錯誤
     res.status(StatusCodes.OK).json({
-      success: true,
-      message: '',
-      result: user
+      success: true, // 這次操作是否成功
+      message: '', // 錯誤訊息
+      result: user // 結果－這裡是建立的user，操作有成功才會有result
     })
   } catch (error) {
     console.log(error)
-    // 終端機顯示錯誤MomgoServerError，且錯誤代碼為E11000，表示有東西重複
+    // 資料重複（unique錯誤） => 終端機顯示錯誤MomgoServerError，且錯誤代碼為E11000--------------
     if (error.name === 'MongoServerError' && error.code === 11000) {
-      // 資料重複 unique錯誤
+      // 各自判斷比較麻煩，這裡不作各自判斷
       res.status(StatusCodes.CONFLICT).json({
         success: false,
         message: '帳號或信箱重複'
       })
+
+      // 驗證錯誤（例如：帳號規定4個字但使用者只打3個字、Email沒有加@-----------------------------
     } else if (error.name === 'ValidationError') {
-      // 驗證錯誤
-      // 第一個驗證失敗的欄位名稱
+      // 若有多個錯誤，這裡只抓出第一個錯誤
+      // 取出第一個驗證失敗的欄位名稱與錯誤訊息 => key、message
       const key = Object.keys(error.errors)[0]
-      const message = error.errors[key].message
+      const message = error.errors[key].message // 這個會是你在schema定義的錯誤訊息
 
       res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
@@ -104,9 +109,13 @@ app.post('/', async (req, res) => {
   }
 })
 
+// 查詢（請求為get）-------------------------------------------------------------------
+// 取全部---------------------------
 app.get('/', async (req, res) => {
   try {
+    // mongoose語法參考說明：https://mongoosejs.com/docs/api/model.html
     // .find()裡面是寫查詢條件，不寫就是查詢全部
+    // 找到的所有東西會形成一個陣列（這裡的result）
     const result = await User.find()
 
     res.status(StatusCodes.OK).json({
@@ -122,7 +131,7 @@ app.get('/', async (req, res) => {
   }
 })
 
-// 查詢
+// 取單個---------------------------
 app.get('/:id', async (req, res) => {
   console.log('id', req.params.id)
   console.log('query', req.query)
@@ -164,6 +173,7 @@ app.get('/:id', async (req, res) => {
   }
 })
 
+// 刪除（請求為delete）-------------------------------------------------------------------
 app.delete('/:id', async (req, res) => {
   try {
     // 跟ID有關的就有可逢發生格式錯誤
@@ -197,6 +207,7 @@ app.delete('/:id', async (req, res) => {
   }
 })
 
+// 修改（請求為patch`)-------------------------------------------------------------------
 // put 整組換掉
 // patch 部分換掉
 app.patch('/:id', async (req, res) => {
