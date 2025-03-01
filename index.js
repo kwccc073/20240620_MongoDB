@@ -132,28 +132,34 @@ app.get('/', async (req, res) => {
 })
 
 // 取單個---------------------------
+/* https://localhost:4000/dfhjsf?aaa=bbb&ccc=ddd
+   id => dfhjsf
+   query => aaa=bbb&ccc=ddd，query通常拿來做過濾的設定
+*/
 app.get('/:id', async (req, res) => {
-  console.log('id', req.params.id)
+  console.log('id', req.params.id) // 取得網址的id
   console.log('query', req.query)
   try {
+    // 如果id格式不對 => 拋出錯誤'ID'（try catch：有錯誤會直接跳到catch部分，節省效能）
     if (!validator.isMongoId(req.params.id)) throw new Error('ID')
 
-    /* 其他寫法
+    /* 其他寫法（這些User.xxxx()都是來自mongoose的語法
     const user = await User.find({ _id: req.params.id})
     const user = await User.findOne({ _id: req.params.id}) */
     const user = await User.findById(req.params.id)
 
-    // 拋出錯誤
-    // 找不到使用者的情況
+    // 如果找不到使用者 => 拋出錯誤'NOT FOUND'
     if (!user) throw new Error('NOT FOUND')
 
+    // 有找到的話，回傳以下內容
     res.status(StatusCodes.OK).json({
       success: true,
       message: '',
       result: user
     })
   } catch (error) {
-    // 如果mongoDB的id格式不正確時
+    // 錯誤處理-----------------------------------------------
+    // 如果id格式不正確時 (CattError => mongoDB的id格式不對 || 錯誤訊息叫做'ID')
     if (error.name === 'CattError' || error.message === 'ID') {
       res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
@@ -176,11 +182,14 @@ app.get('/:id', async (req, res) => {
 // 刪除（請求為delete）-------------------------------------------------------------------
 app.delete('/:id', async (req, res) => {
   try {
-    // 跟ID有關的就有可逢發生格式錯誤
+    // 跟ID有關的就有可能發生格式錯誤，所以都要放這行
     if (!validator.isMongoId(req.params.id)) throw new Error('ID')
 
+    // 找到id為req.params.od，並刪除這個東西
+    // user就會指到被刪除的那個東西
     const user = await User.findByIdAndUpdate(req.params.od)
 
+    // 跟ID有關的就有可能找不到，所以都要放這行
     if (!user) throw Error('NOT FOUND')
 
     res.status(StatusCodes.OK).json({
@@ -207,18 +216,18 @@ app.delete('/:id', async (req, res) => {
   }
 })
 
-// 修改（請求為patch`)-------------------------------------------------------------------
-// put 整組換掉
-// patch 部分換掉
+// 修改（請求為patch，表示部分換掉；若是put，則是整組換掉)-------------------------------------------------------------------
 app.patch('/:id', async (req, res) => {
   try {
-    // 跟ID有關的就有可逢發生格式錯誤
+    // 跟ID有關的就有可能發生格式錯誤，所以都要放這行
     if (!validator.isMongoId(req.params.id)) throw new Error('ID')
-    // new:true 設定回傳更新後的資料
-    // runValidators: true 執行schema 定義的驗證
+
+    // .findByIdAndUpdate(id, 要更新的東西, 這個動作的一些參數設定)
+    // new:true => 使user裡面是更新後的資料（false的話會是舊資料）
+    // runValidators: true => 更新資料一樣要執行schema定義的驗證
     const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
 
-    // 找不到使用者的情況
+    // 跟ID有關的就有可能找不到，所以都要放這行
     if (!user) throw new Error('NOT FOUND')
 
     // 回傳更新後的資訊
@@ -233,6 +242,7 @@ app.patch('/:id', async (req, res) => {
         success: false,
         message: '格式錯誤'
       })
+    // 驗證錯誤（跟新增請求一樣）--------------------------------------------------------
     } else if (error.name === 'MongoServerError' && error.code === 11000) {
       // 資料重複 unique 錯誤
       res.status(StatusCodes.CONFLICT).json({
@@ -249,6 +259,7 @@ app.patch('/:id', async (req, res) => {
         success: false,
         message
       })
+      // 找不到---------------------------------------------------------------------------
     } else if (error.message === 'NOT FOUND') {
       res.status(StatusCodes.NOT_FOUND).json({
         success: false,
